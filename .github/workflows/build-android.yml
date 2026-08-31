@@ -11,23 +11,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Get the project
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 2. Java
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
+      # 3. Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK components
+      - name: Install Android SDK
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
           yes | sdkmanager --licenses || true
 
+      # 4. Download Godot
       - name: Download Godot
         run: |
           wget -q https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_linux.x86_64.zip
@@ -35,34 +41,110 @@ jobs:
           mv Godot_v4.5.1-stable_linux.x86_64 godot
           chmod +x godot
 
-      - name: Download Godot export templates
+      # 5. Download Android export templates
+      - name: Install Godot Android Export Templates
         run: |
           wget -q https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz
+
           mkdir -p "$HOME/.local/share/godot/export_templates/4.5.1.stable"
+
+          mkdir -p /tmp/godot_templates
+
           unzip -q Godot_v4.5.1-stable_export_templates.tpz \
-            -d "$HOME/.local/share/godot/export_templates/4.5.1.stable"
+            -d /tmp/godot_templates
 
-      - name: Configure Android environment
+          echo "Searching for Android templates..."
+
+          DEBUG_TEMPLATE=$(find /tmp/godot_templates \
+            -type f \
+            -name "android_debug.apk" \
+            -print -quit)
+
+          RELEASE_TEMPLATE=$(find /tmp/godot_templates \
+            -type f \
+            -name "android_release.apk" \
+            -print -quit)
+
+          if [ -z "$DEBUG_TEMPLATE" ]; then
+            echo "ERROR: android_debug.apk not found"
+            find /tmp/godot_templates -type f
+            exit 1
+          fi
+
+          if [ -z "$RELEASE_TEMPLATE" ]; then
+            echo "ERROR: android_release.apk not found"
+            find /tmp/godot_templates -type f
+            exit 1
+          fi
+
+          cp "$DEBUG_TEMPLATE" \
+            "$HOME/.local/share/godot/export_templates/4.5.1.stable/android_debug.apk"
+
+          cp "$RELEASE_TEMPLATE" \
+            "$HOME/.local/share/godot/export_templates/4.5.1.stable/android_release.apk"
+
+          echo "Godot Android templates installed!"
+
+          ls -lh \
+            "$HOME/.local/share/godot/export_templates/4.5.1.stable/"
+
+      # 6. Verify templates
+      - name: Verify Android Templates
         run: |
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          test -f "$HOME/.local/share/godot/export_templates/4.5.1.stable/android_debug.apk"
+          test -f "$HOME/.local/share/godot/export_templates/4.5.1.stable/android_release.apk"
 
-      - name: Import project
+          echo "================================="
+          echo "ANDROID TEMPLATES READY"
+          echo "================================="
+
+      # 7. Import project
+      - name: Import Godot Project
         run: |
-          ./godot --headless --path . --editor --quit
+          ./godot --headless \
+            --path . \
+            --editor \
+            --quit
 
-      - name: Check Android preset
+      # 8. Check project
+      - name: Check Project
         run: |
-          ./godot --headless --path . --editor --quit
-          grep -A60 'name="Android"' export_presets.cfg || true
+          echo "Project files:"
+          ls -la
+          echo ""
+          echo "Checking project.godot..."
+          test -f project.godot
+          echo "project.godot found!"
 
+          echo ""
+          echo "Checking Android preset..."
+          grep -A20 'name="Android"' export_presets.cfg || true
+
+      # 9. Build APK
       - name: Export Android APK
         run: |
           mkdir -p builds
-          ./godot --headless --path . \
+
+          ./godot \
+            --headless \
+            --path . \
             --export-debug "Android" \
             builds/3D_Rush.apk
 
+      # 10. Check APK
+      - name: Verify APK
+        run: |
+          echo "Checking APK..."
+
+          test -f builds/3D_Rush.apk
+
+          ls -lh builds/3D_Rush.apk
+
+          echo "================================="
+          echo "APK BUILD SUCCESSFUL!"
+          echo "================================="
+
+      # 11. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
