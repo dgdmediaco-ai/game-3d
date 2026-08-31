@@ -198,16 +198,24 @@ jobs:
       # ==========================================
       # 10. EXPORT APK
       # ==========================================
-      - name: Export Android APK
+      - name: Diagnose Android Export
         run: |
+          echo "========== PROJECT =========="
+          pwd
+          test -f project.godot && echo "project.godot: FOUND"
+          test -f export_presets.cfg && echo "export_presets.cfg: FOUND"
 
-          mkdir -p builds
+          echo ""
+          echo "========== EXPORT PRESET =========="
+          cat export_presets.cfg
 
-          ./godot \
-          --headless \
-          --path "$GITHUB_WORKSPACE" \
-          --export-debug "Android" \
-          "$GITHUB_WORKSPACE/builds/3D_Rush.apk"
+          echo ""
+          echo "========== GODOT VERSION =========="
+          ./godot --version
+
+          echo ""
+          echo "========== EXPORT LIST =========="
+          ./godot --headless --path "$GITHUB_WORKSPACE" --export-debug
 
 
       # ==========================================
